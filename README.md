@@ -13,11 +13,11 @@ const ExpenseTracker = () => {
     paymentMethod: 'Pix', 
     installments: '2', 
     date: new Date().toISOString().split('T')[0],
-    firstInstallmentDate: new Date().toISOString().split('T')[0]
+    installmentDates: []
   });
   const [dateRange, setDateRange] = useState({
-    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    end: new Date().toISOString().split('T')[0]
+    start: '2026-01-01',
+    end: '2026-12-31'
   });
   const [currentPage, setCurrentPage] = useState('adicionar');
   const [showCategoryManager, setShowCategoryManager] = useState(false);
@@ -30,6 +30,29 @@ const ExpenseTracker = () => {
   const people = ['Renato', 'Anna'];
   const paymentMethods = ['Pix', 'Crédito', 'Parcelado'];
 
+  const categoryColors = {
+    'Comida': '#ef4444',
+    'Móveis': '#f97316',
+    'Utensílios': '#f59e0b',
+    'Conforto': '#eab308',
+    'Energia': '#84cc16',
+    'Água': '#22c55e',
+    'Internet': '#10b981',
+    'Outros': '#14b8a6'
+  };
+
+  const updateInstallmentDates = (count) => {
+    if (!count || count < 2) count = 2;
+    const dates = [];
+    const today = new Date();
+    for (let i = 0; i < count; i++) {
+      const d = new Date(today);
+      d.setMonth(d.getMonth() + i);
+      dates.push(d.toISOString().split('T')[0]);
+    }
+    setForm({...form, installments: count.toString(), installmentDates: dates});
+  };
+
   const addExpense = () => {
     if (!form.description.trim() || !form.amount || parseFloat(form.amount) <= 0) {
       alert('Preencha descrição e valor!');
@@ -41,9 +64,11 @@ const ExpenseTracker = () => {
     const newExp = [];
     
     for (let i = 0; i < count; i++) {
-      const d = form.paymentMethod === 'Parcelado' ? new Date(form.firstInstallmentDate) : new Date(form.date);
-      if (form.paymentMethod === 'Parcelado') {
-        d.setMonth(d.getMonth() + i);
+      let d;
+      if (form.paymentMethod === 'Parcelado' && form.installmentDates && form.installmentDates[i]) {
+        d = form.installmentDates[i];
+      } else {
+        d = form.date;
       }
       
       newExp.push({
@@ -54,19 +79,32 @@ const ExpenseTracker = () => {
         paidBy: form.paidBy,
         splitType: form.splitType,
         paymentMethod: form.paymentMethod,
-        date: d.toISOString().split('T')[0],
+        date: d,
         paid: false,
         renatoShare: form.splitType === '50/50' ? amt / 2 : (form.paidBy === 'Renato' ? amt : 0),
         annaShare: form.splitType === '50/50' ? amt / 2 : (form.paidBy === 'Anna' ? amt : 0)
       });
     }
     setExpenses([...expenses, ...newExp]);
-    setForm({...form, description: '', amount: '', installments: '2', date: new Date().toISOString().split('T')[0], firstInstallmentDate: new Date().toISOString().split('T')[0]});
+    setForm({
+      ...form, 
+      description: '', 
+      amount: '', 
+      installments: '2', 
+      date: new Date().toISOString().split('T')[0],
+      installmentDates: []
+    });
     alert('Despesa adicionada!');
   };
 
   const togglePaid = (id) => {
     setExpenses(expenses.map(e => e.id === id ? {...e, paid: !e.paid} : e));
+  };
+
+  const deleteExpense = (id) => {
+    if (window.confirm('Tem certeza que deseja excluir esta despesa?')) {
+      setExpenses(expenses.filter(e => e.id !== id));
+    }
   };
 
   const filterByDateRange = (exp) => {
@@ -82,13 +120,68 @@ const ExpenseTracker = () => {
   const balance = renatoTotal - annaTotal;
   const byCategory = categories.map(cat => ({
     name: cat,
-    total: filtered.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0)
+    total: filtered.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0),
+    color: categoryColors[cat] || '#6366f1'
   })).filter(c => c.total > 0);
+
+  const totalAmount = byCategory.reduce((sum, cat) => sum + cat.total, 0);
 
   const bg = darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 to-indigo-100';
   const card = darkMode ? 'bg-gray-800 text-white' : 'bg-white';
   const input = darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300';
   const btn = darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700';
+
+  const PieChart = ({ data }) => {
+    if (!data || data.length === 0) return null;
+    
+    const size = 300;
+    const radius = 120;
+    const centerX = size / 2;
+    const centerY = size / 2;
+
+    let currentAngle = -90;
+    const paths = (data || []).map((item, index) => {
+      const percentage = (item.total / totalAmount) * 100;
+      const angle = (percentage / 100) * 360;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + angle;
+
+      const startRad = (startAngle * Math.PI) / 180;
+      const endRad = (endAngle * Math.PI) / 180;
+
+      const x1 = centerX + radius * Math.cos(startRad);
+      const y1 = centerY + radius * Math.sin(startRad);
+      const x2 = centerX + radius * Math.cos(endRad);
+      const y2 = centerY + radius * Math.sin(endRad);
+
+      const largeArc = angle > 180 ? 1 : 0;
+
+      const pathData = [
+        `M ${centerX} ${centerY}`,
+        `L ${x1} ${y1}`,
+        `A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`,
+        'Z'
+      ].join(' ');
+
+      currentAngle = endAngle;
+
+      return (
+        <path
+          key={index}
+          d={pathData}
+          fill={item.color}
+          stroke={darkMode ? '#1f2937' : 'white'}
+          strokeWidth="2"
+        />
+      );
+    });
+
+    return (
+      <svg width={size} height={size} className="mx-auto">
+        {paths}
+      </svg>
+    );
+  };
 
   return (
     <div className={`min-h-screen ${bg}`}>
@@ -128,26 +221,61 @@ const ExpenseTracker = () => {
             <h2 className="text-2xl font-semibold mb-4">Gerenciar Categorias</h2>
             <div className="flex gap-2 mb-4">
               <input type="text" placeholder="Nova categoria" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} 
-                onKeyPress={(e) => e.key === 'Enter' && newCategory.trim() && !categories.includes(newCategory.trim()) && (setCategories([...categories, newCategory.trim()]), setNewCategory(''))}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && newCategory.trim() && !categories.includes(newCategory.trim())) {
+                    const newCat = newCategory.trim();
+                    setCategories([...categories, newCat]);
+                    if (!categoryColors[newCat]) {
+                      categoryColors[newCat] = `#${Math.floor(Math.random()*16777215).toString(16)}`;
+                    }
+                    setNewCategory('');
+                  }
+                }}
                 className={`flex-1 p-3 border rounded-lg ${input}`} />
-              <button onClick={() => newCategory.trim() && !categories.includes(newCategory.trim()) && (setCategories([...categories, newCategory.trim()]), setNewCategory(''))} className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold">Adicionar</button>
+              <button onClick={() => {
+                if (newCategory.trim() && !categories.includes(newCategory.trim())) {
+                  const newCat = newCategory.trim();
+                  setCategories([...categories, newCat]);
+                  if (!categoryColors[newCat]) {
+                    categoryColors[newCat] = `#${Math.floor(Math.random()*16777215).toString(16)}`;
+                  }
+                  setNewCategory('');
+                }
+              }} className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold">Adicionar</button>
             </div>
             <div className="space-y-2">
-              {categories.map(cat => (
+              {(categories || []).map(cat => (
                 <div key={cat} className={`flex items-center gap-2 p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <div className="w-6 h-6 rounded-full" style={{backgroundColor: categoryColors[cat] || '#6366f1'}}></div>
                   {editingCategory === cat ? (
                     <>
                       <input type="text" value={editingCategoryName} onChange={(e) => setEditingCategoryName(e.target.value)} 
-                        onKeyPress={(e) => e.key === 'Enter' && editingCategoryName.trim() && (setCategories(categories.map(c => c === editingCategory ? editingCategoryName.trim() : c)), setExpenses(expenses.map(ex => ex.category === editingCategory ? {...ex, category: editingCategoryName.trim()} : ex)), setEditingCategory(null))}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && editingCategoryName.trim()) {
+                            setCategories(categories.map(c => c === editingCategory ? editingCategoryName.trim() : c));
+                            setExpenses(expenses.map(ex => ex.category === editingCategory ? {...ex, category: editingCategoryName.trim()} : ex));
+                            setEditingCategory(null);
+                          }
+                        }}
                         className={`flex-1 p-2 border rounded ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} autoFocus />
-                      <button onClick={() => editingCategoryName.trim() && (setCategories(categories.map(c => c === editingCategory ? editingCategoryName.trim() : c)), setExpenses(expenses.map(ex => ex.category === editingCategory ? {...ex, category: editingCategoryName.trim()} : ex)), setEditingCategory(null))} className="text-green-600"><Check className="w-5 h-5" /></button>
+                      <button onClick={() => {
+                        if (editingCategoryName.trim()) {
+                          setCategories(categories.map(c => c === editingCategory ? editingCategoryName.trim() : c));
+                          setExpenses(expenses.map(ex => ex.category === editingCategory ? {...ex, category: editingCategoryName.trim()} : ex));
+                          setEditingCategory(null);
+                        }
+                      }} className="text-green-600"><Check className="w-5 h-5" /></button>
                       <button onClick={() => setEditingCategory(null)} className="text-red-600"><X className="w-5 h-5" /></button>
                     </>
                   ) : (
                     <>
                       <span className="flex-1 font-medium">{cat}</span>
                       <button onClick={() => {setEditingCategory(cat); setEditingCategoryName(cat);}} className="text-blue-600"><Edit2 className="w-5 h-5" /></button>
-                      <button onClick={() => categories.length > 1 && setCategories(categories.filter(c => c !== cat))} className="text-red-600"><Trash2 className="w-5 h-5" /></button>
+                      <button onClick={() => {
+                        if (categories.length > 1) {
+                          setCategories(categories.filter(c => c !== cat));
+                        }
+                      }} className="text-red-600"><Trash2 className="w-5 h-5" /></button>
                     </>
                   )}
                 </div>
@@ -163,7 +291,7 @@ const ExpenseTracker = () => {
               <input type="text" placeholder="Descrição" value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} className={`p-3 border rounded-lg ${input}`} />
               <input type="number" step="0.01" placeholder="Valor" value={form.amount} onChange={(e) => setForm({...form, amount: e.target.value})} className={`p-3 border rounded-lg ${input}`} />
               <select value={form.category} onChange={(e) => setForm({...form, category: e.target.value})} className={`p-3 border rounded-lg ${input}`}>
-                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                {(categories || []).map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </select>
               {form.paymentMethod !== 'Parcelado' && (
                 <input type="date" value={form.date} onChange={(e) => setForm({...form, date: e.target.value})} className={`p-3 border rounded-lg ${input}`} />
@@ -185,18 +313,63 @@ const ExpenseTracker = () => {
             <div className="mb-4">
               <label className="block text-sm font-semibold mb-2">Forma de Pagamento:</label>
               <div className="flex gap-2">
-                {paymentMethods.map(m => <button key={m} onClick={() => setForm({...form, paymentMethod: m, installments: m === 'Parcelado' ? form.installments : '1'})} className={`flex-1 py-3 rounded-lg font-semibold ${form.paymentMethod === m ? 'bg-purple-600 text-white' : btn}`}>{m}</button>)}
+                {paymentMethods.map(m => <button key={m} onClick={() => {
+                  if (m === 'Parcelado') {
+                    const count = parseInt(form.installments) || 2;
+                    const dates = [];
+                    const today = new Date();
+                    for (let i = 0; i < count; i++) {
+                      const d = new Date(today);
+                      d.setMonth(d.getMonth() + i);
+                      dates.push(d.toISOString().split('T')[0]);
+                    }
+                    setForm({...form, paymentMethod: m, installments: count.toString(), installmentDates: dates});
+                  } else {
+                    setForm({...form, paymentMethod: m, installments: '1', installmentDates: []});
+                  }
+                }} className={`flex-1 py-3 rounded-lg font-semibold ${form.paymentMethod === m ? 'bg-purple-600 text-white' : btn}`}>{m}</button>)}
               </div>
             </div>
             {form.paymentMethod === 'Parcelado' && (
               <div className="mb-4 space-y-4">
                 <div>
                   <label className="block text-sm font-semibold mb-2">Número de Parcelas:</label>
-                  <input type="number" min="2" max="24" value={form.installments} onChange={(e) => setForm({...form, installments: e.target.value})} className={`w-full p-3 border rounded-lg ${input}`} />
+                  <input 
+                    type="number" 
+                    min="2" 
+                    max="24" 
+                    value={form.installments} 
+                    onChange={(e) => {
+                      const count = parseInt(e.target.value) || 2;
+                      const dates = [];
+                      const today = new Date();
+                      for (let i = 0; i < count; i++) {
+                        const d = new Date(today);
+                        d.setMonth(d.getMonth() + i);
+                        dates.push(d.toISOString().split('T')[0]);
+                      }
+                      setForm({...form, installments: count.toString(), installmentDates: dates});
+                    }} 
+                    className={`w-full p-3 border rounded-lg ${input}`} 
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold mb-2">Data da Primeira Parcela:</label>
-                  <input type="date" value={form.firstInstallmentDate} onChange={(e) => setForm({...form, firstInstallmentDate: e.target.value})} className={`w-full p-3 border rounded-lg ${input}`} />
+                  <label className="block text-sm font-semibold mb-2">Datas das Parcelas:</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(form.installmentDates || []).map((date, i) => (
+                      <input 
+                        key={i} 
+                        type="date" 
+                        value={date} 
+                        onChange={(e) => {
+                          const newDates = [...form.installmentDates];
+                          newDates[i] = e.target.value;
+                          setForm({...form, installmentDates: newDates});
+                        }}
+                        className={`p-2 border rounded ${input}`}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -257,23 +430,41 @@ const ExpenseTracker = () => {
               </div>
             </div>
             {byCategory.length > 0 ? (
-              <div className={`rounded-xl shadow-lg p-8 ${card}`}>
-                <h3 className="text-3xl font-semibold mb-8">Gastos por Categoria</h3>
-                <div className="space-y-6">
-                  {byCategory.map(cat => (
-                    <div key={cat.name} className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-xl font-semibold">{cat.name}</span>
-                        <span className="text-2xl font-bold text-indigo-600">R$ {cat.total.toFixed(2)}</span>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className={`rounded-xl shadow-lg p-8 ${card}`}>
+                  <h3 className="text-3xl font-semibold mb-8 text-center">Gráfico de Gastos</h3>
+                  <PieChart data={byCategory} />
+                  <div className="mt-6 space-y-2">
+                    {(byCategory || []).map(cat => (
+                      <div key={cat.name} className="flex items-center gap-3">
+                        <div className="w-4 h-4 rounded-full" style={{backgroundColor: cat.color}}></div>
+                        <span className="flex-1 font-medium">{cat.name}</span>
+                        <span className="font-semibold">R$ {cat.total.toFixed(2)}</span>
                       </div>
-                      <div className={`w-full rounded-full h-4 ${darkMode ? 'bg-gray-600' : 'bg-gray-200'}`}>
-                        <div className="bg-indigo-600 h-4 rounded-full" style={{width: `${(cat.total / filtered.reduce((s, e) => s + e.amount, 0)) * 100}%`}} />
+                    ))}
+                  </div>
+                </div>
+                <div className={`rounded-xl shadow-lg p-8 ${card}`}>
+                  <h3 className="text-3xl font-semibold mb-8">Detalhes por Categoria</h3>
+                  <div className="space-y-6">
+                    {(byCategory || []).map(cat => (
+                      <div key={cat.name} className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-6 h-6 rounded-full" style={{backgroundColor: cat.color}}></div>
+                            <span className="text-xl font-semibold">{cat.name}</span>
+                          </div>
+                          <span className="text-2xl font-bold" style={{color: cat.color}}>R$ {cat.total.toFixed(2)}</span>
+                        </div>
+                        <div className={`w-full rounded-full h-4 ${darkMode ? 'bg-gray-600' : 'bg-gray-200'}`}>
+                          <div className="h-4 rounded-full" style={{width: `${(cat.total / totalAmount) * 100}%`, backgroundColor: cat.color}} />
+                        </div>
+                        <p className={`text-sm mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {((cat.total / totalAmount) * 100).toFixed(1)}% do total
+                        </p>
                       </div>
-                      <p className={`text-sm mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {((cat.total / filtered.reduce((s, e) => s + e.amount, 0)) * 100).toFixed(1)}% do total
-                      </p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -311,14 +502,14 @@ const ExpenseTracker = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {filtered.sort((a, b) => new Date(b.date) - new Date(a.date)).map(exp => 
+                  {(filtered || []).sort((a, b) => new Date(b.date) - new Date(a.date)).map(exp => 
                     editingExpense && editingExpense.id === exp.id ? (
                       <div key={exp.id} className={`p-5 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
                         <div className="grid grid-cols-2 gap-3 mb-3">
                           <input type="text" value={editingExpense.description} onChange={(e) => setEditingExpense({...editingExpense, description: e.target.value})} className={`p-2 border rounded ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} />
                           <input type="number" step="0.01" value={editingExpense.amount} onChange={(e) => setEditingExpense({...editingExpense, amount: e.target.value})} className={`p-2 border rounded ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} />
                           <select value={editingExpense.category} onChange={(e) => setEditingExpense({...editingExpense, category: e.target.value})} className={`p-2 border rounded ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`}>
-                            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                            {(categories || []).map(cat => <option key={cat} value={cat}>{cat}</option>)}
                           </select>
                           <input type="date" value={editingExpense.date} onChange={(e) => setEditingExpense({...editingExpense, date: e.target.value})} className={`p-2 border rounded ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} />
                         </div>
@@ -357,7 +548,7 @@ const ExpenseTracker = () => {
                         <div className="flex items-center gap-4">
                           <span className={`font-bold text-2xl ${exp.paid ? 'line-through opacity-60' : ''}`}>R$ {exp.amount.toFixed(2)}</span>
                           <button onClick={() => setEditingExpense(exp)} className="text-blue-600 hover:text-blue-700 p-2"><Edit2 className="w-5 h-5" /></button>
-                          <button onClick={() => window.confirm('Excluir?') && setExpenses(expenses.filter(e => e.id !== exp.id))} className="text-red-600 hover:text-red-700 p-2"><Trash2 className="w-5 h-5" /></button>
+                          <button onClick={() => deleteExpense(exp.id)} className="text-red-600 hover:text-red-700 p-2"><Trash2 className="w-5 h-5" /></button>
                         </div>
                       </div>
                     )
