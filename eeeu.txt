@@ -1,0 +1,566 @@
+import React, { useState } from 'react';
+import { PlusCircle, TrendingUp, DollarSign, Calendar, User, Trash2, Edit2, Check, X, Settings, Home, PieChart, Receipt, Moon, Sun } from 'lucide-react';
+
+const ExpenseTracker = () => {
+  const [expenses, setExpenses] = useState([]);
+  const [categories, setCategories] = useState(['Comida', 'Móveis', 'Utensílios', 'Conforto', 'Energia', 'Água', 'Internet', 'Outros']);
+  const [form, setForm] = useState({
+    description: '', 
+    amount: '', 
+    category: 'Comida', 
+    paidBy: 'Renato', 
+    splitType: '50/50', 
+    paymentMethod: 'Pix', 
+    installments: '2', 
+    date: new Date().toISOString().split('T')[0],
+    installmentDates: []
+  });
+  const [dateRange, setDateRange] = useState({
+    start: '2026-01-01',
+    end: '2026-12-31'
+  });
+  const [currentPage, setCurrentPage] = useState('adicionar');
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [darkMode, setDarkMode] = useState(false);
+
+  const people = ['Renato', 'Anna'];
+  const paymentMethods = ['Pix', 'Crédito', 'Parcelado'];
+
+  const categoryColors = {
+    'Comida': '#ef4444',
+    'Móveis': '#f97316',
+    'Utensílios': '#f59e0b',
+    'Conforto': '#eab308',
+    'Energia': '#84cc16',
+    'Água': '#22c55e',
+    'Internet': '#10b981',
+    'Outros': '#14b8a6'
+  };
+
+  const updateInstallmentDates = (count) => {
+    if (!count || count < 2) count = 2;
+    const dates = [];
+    const today = new Date();
+    for (let i = 0; i < count; i++) {
+      const d = new Date(today);
+      d.setMonth(d.getMonth() + i);
+      dates.push(d.toISOString().split('T')[0]);
+    }
+    setForm({...form, installments: count.toString(), installmentDates: dates});
+  };
+
+  const addExpense = () => {
+    if (!form.description.trim() || !form.amount || parseFloat(form.amount) <= 0) {
+      alert('Preencha descrição e valor!');
+      return;
+    }
+    const total = parseFloat(form.amount);
+    const count = form.paymentMethod === 'Parcelado' ? parseInt(form.installments) : 1;
+    const amt = total / count;
+    const newExp = [];
+    
+    for (let i = 0; i < count; i++) {
+      let d;
+      if (form.paymentMethod === 'Parcelado' && form.installmentDates && form.installmentDates[i]) {
+        d = form.installmentDates[i];
+      } else {
+        d = form.date;
+      }
+      
+      newExp.push({
+        id: `${Date.now()}-${i}-${Math.random()}`,
+        description: count > 1 ? `${form.description} (${i + 1}/${count})` : form.description,
+        amount: amt,
+        category: form.category,
+        paidBy: form.paidBy,
+        splitType: form.splitType,
+        paymentMethod: form.paymentMethod,
+        date: d,
+        paid: false,
+        renatoShare: form.splitType === '50/50' ? amt / 2 : (form.paidBy === 'Renato' ? amt : 0),
+        annaShare: form.splitType === '50/50' ? amt / 2 : (form.paidBy === 'Anna' ? amt : 0)
+      });
+    }
+    setExpenses([...expenses, ...newExp]);
+    setForm({
+      ...form, 
+      description: '', 
+      amount: '', 
+      installments: '2', 
+      date: new Date().toISOString().split('T')[0],
+      installmentDates: []
+    });
+    alert('Despesa adicionada!');
+  };
+
+  const togglePaid = (id) => {
+    setExpenses(expenses.map(e => e.id === id ? {...e, paid: !e.paid} : e));
+  };
+
+  const deleteExpense = (id) => {
+    if (window.confirm('Tem certeza que deseja excluir esta despesa?')) {
+      setExpenses(expenses.filter(e => e.id !== id));
+    }
+  };
+
+  const filterByDateRange = (exp) => {
+    const expDate = new Date(exp.date);
+    const start = new Date(dateRange.start);
+    const end = new Date(dateRange.end);
+    return expDate >= start && expDate <= end;
+  };
+
+  const filtered = expenses.filter(filterByDateRange);
+  const renatoTotal = filtered.reduce((s, e) => s + e.renatoShare, 0);
+  const annaTotal = filtered.reduce((s, e) => s + e.annaShare, 0);
+  const balance = renatoTotal - annaTotal;
+  const byCategory = categories.map(cat => ({
+    name: cat,
+    total: filtered.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0),
+    color: categoryColors[cat] || '#6366f1'
+  })).filter(c => c.total > 0);
+
+  const totalAmount = byCategory.reduce((sum, cat) => sum + cat.total, 0);
+
+  const bg = darkMode ? 'bg-gray-900' : 'bg-gradient-to-br from-blue-50 to-indigo-100';
+  const card = darkMode ? 'bg-gray-800 text-white' : 'bg-white';
+  const input = darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300';
+  const btn = darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700';
+
+  const PieChart = ({ data }) => {
+    if (!data || data.length === 0) return null;
+    
+    const size = 300;
+    const radius = 120;
+    const centerX = size / 2;
+    const centerY = size / 2;
+
+    let currentAngle = -90;
+    const paths = (data || []).map((item, index) => {
+      const percentage = (item.total / totalAmount) * 100;
+      const angle = (percentage / 100) * 360;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + angle;
+
+      const startRad = (startAngle * Math.PI) / 180;
+      const endRad = (endAngle * Math.PI) / 180;
+
+      const x1 = centerX + radius * Math.cos(startRad);
+      const y1 = centerY + radius * Math.sin(startRad);
+      const x2 = centerX + radius * Math.cos(endRad);
+      const y2 = centerY + radius * Math.sin(endRad);
+
+      const largeArc = angle > 180 ? 1 : 0;
+
+      const pathData = [
+        `M ${centerX} ${centerY}`,
+        `L ${x1} ${y1}`,
+        `A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`,
+        'Z'
+      ].join(' ');
+
+      currentAngle = endAngle;
+
+      return (
+        <path
+          key={index}
+          d={pathData}
+          fill={item.color}
+          stroke={darkMode ? '#1f2937' : 'white'}
+          strokeWidth="2"
+        />
+      );
+    });
+
+    return (
+      <svg width={size} height={size} className="mx-auto">
+        {paths}
+      </svg>
+    );
+  };
+
+  return (
+    <div className={`min-h-screen ${bg}`}>
+      <div className={`${card} shadow-lg`}>
+        <div className="max-w-6xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className={`text-3xl font-bold flex items-center gap-3 ${darkMode ? 'text-indigo-400' : 'text-indigo-900'}`}>
+              <DollarSign className="w-8 h-8" />Controle de Gastos
+            </h1>
+            <div className="flex gap-2">
+              <button onClick={() => setDarkMode(!darkMode)} className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-2 ${darkMode ? 'bg-gray-700 text-yellow-400' : btn}`}>
+                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+              <button onClick={() => setShowCategoryManager(!showCategoryManager)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2">
+                <Settings className="w-5 h-5" />Categorias
+              </button>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {[
+              {id: 'adicionar', icon: PlusCircle, label: 'Adicionar'}, 
+              {id: 'saldo', icon: Home, label: 'Saldo'}, 
+              {id: 'categorias', icon: PieChart, label: 'Categorias'}, 
+              {id: 'historico', icon: Receipt, label: 'Histórico'}
+            ].map(p => (
+              <button key={p.id} onClick={() => setCurrentPage(p.id)} className={`flex-1 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 ${currentPage === p.id ? 'bg-indigo-600 text-white' : btn}`}>
+                <p.icon className="w-5 h-5" />{p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto p-6">
+        {showCategoryManager && (
+          <div className={`rounded-xl shadow-lg p-6 mb-6 ${card}`}>
+            <h2 className="text-2xl font-semibold mb-4">Gerenciar Categorias</h2>
+            <div className="flex gap-2 mb-4">
+              <input type="text" placeholder="Nova categoria" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} 
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && newCategory.trim() && !categories.includes(newCategory.trim())) {
+                    const newCat = newCategory.trim();
+                    setCategories([...categories, newCat]);
+                    if (!categoryColors[newCat]) {
+                      categoryColors[newCat] = `#${Math.floor(Math.random()*16777215).toString(16)}`;
+                    }
+                    setNewCategory('');
+                  }
+                }}
+                className={`flex-1 p-3 border rounded-lg ${input}`} />
+              <button onClick={() => {
+                if (newCategory.trim() && !categories.includes(newCategory.trim())) {
+                  const newCat = newCategory.trim();
+                  setCategories([...categories, newCat]);
+                  if (!categoryColors[newCat]) {
+                    categoryColors[newCat] = `#${Math.floor(Math.random()*16777215).toString(16)}`;
+                  }
+                  setNewCategory('');
+                }
+              }} className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold">Adicionar</button>
+            </div>
+            <div className="space-y-2">
+              {(categories || []).map(cat => (
+                <div key={cat} className={`flex items-center gap-2 p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <div className="w-6 h-6 rounded-full" style={{backgroundColor: categoryColors[cat] || '#6366f1'}}></div>
+                  {editingCategory === cat ? (
+                    <>
+                      <input type="text" value={editingCategoryName} onChange={(e) => setEditingCategoryName(e.target.value)} 
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && editingCategoryName.trim()) {
+                            setCategories(categories.map(c => c === editingCategory ? editingCategoryName.trim() : c));
+                            setExpenses(expenses.map(ex => ex.category === editingCategory ? {...ex, category: editingCategoryName.trim()} : ex));
+                            setEditingCategory(null);
+                          }
+                        }}
+                        className={`flex-1 p-2 border rounded ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} autoFocus />
+                      <button onClick={() => {
+                        if (editingCategoryName.trim()) {
+                          setCategories(categories.map(c => c === editingCategory ? editingCategoryName.trim() : c));
+                          setExpenses(expenses.map(ex => ex.category === editingCategory ? {...ex, category: editingCategoryName.trim()} : ex));
+                          setEditingCategory(null);
+                        }
+                      }} className="text-green-600"><Check className="w-5 h-5" /></button>
+                      <button onClick={() => setEditingCategory(null)} className="text-red-600"><X className="w-5 h-5" /></button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 font-medium">{cat}</span>
+                      <button onClick={() => {setEditingCategory(cat); setEditingCategoryName(cat);}} className="text-blue-600"><Edit2 className="w-5 h-5" /></button>
+                      <button onClick={() => {
+                        if (categories.length > 1) {
+                          setCategories(categories.filter(c => c !== cat));
+                        }
+                      }} className="text-red-600"><Trash2 className="w-5 h-5" /></button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {currentPage === 'adicionar' && (
+          <div className={`rounded-xl shadow-lg p-6 ${card}`}>
+            <h2 className="text-2xl font-semibold mb-6">Adicionar Nova Despesa</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <input type="text" placeholder="Descrição" value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} className={`p-3 border rounded-lg ${input}`} />
+              <input type="number" step="0.01" placeholder="Valor" value={form.amount} onChange={(e) => setForm({...form, amount: e.target.value})} className={`p-3 border rounded-lg ${input}`} />
+              <select value={form.category} onChange={(e) => setForm({...form, category: e.target.value})} className={`p-3 border rounded-lg ${input}`}>
+                {(categories || []).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+              {form.paymentMethod !== 'Parcelado' && (
+                <input type="date" value={form.date} onChange={(e) => setForm({...form, date: e.target.value})} className={`p-3 border rounded-lg ${input}`} />
+              )}
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold mb-2">Pago por:</label>
+              <div className="flex gap-2">
+                {people.map(p => <button key={p} onClick={() => setForm({...form, paidBy: p})} className={`flex-1 py-3 rounded-lg font-semibold ${form.paidBy === p ? 'bg-indigo-600 text-white' : btn}`}>{p}</button>)}
+              </div>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold mb-2">Divisão:</label>
+              <div className="flex gap-2">
+                <button onClick={() => setForm({...form, splitType: '50/50'})} className={`flex-1 py-3 rounded-lg font-semibold ${form.splitType === '50/50' ? 'bg-green-600 text-white' : btn}`}>Dividir 50/50</button>
+                <button onClick={() => setForm({...form, splitType: 'individual'})} className={`flex-1 py-3 rounded-lg font-semibold ${form.splitType === 'individual' ? 'bg-orange-600 text-white' : btn}`}>Individual</button>
+              </div>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold mb-2">Forma de Pagamento:</label>
+              <div className="flex gap-2">
+                {paymentMethods.map(m => <button key={m} onClick={() => {
+                  if (m === 'Parcelado') {
+                    const count = parseInt(form.installments) || 2;
+                    const dates = [];
+                    const today = new Date();
+                    for (let i = 0; i < count; i++) {
+                      const d = new Date(today);
+                      d.setMonth(d.getMonth() + i);
+                      dates.push(d.toISOString().split('T')[0]);
+                    }
+                    setForm({...form, paymentMethod: m, installments: count.toString(), installmentDates: dates});
+                  } else {
+                    setForm({...form, paymentMethod: m, installments: '1', installmentDates: []});
+                  }
+                }} className={`flex-1 py-3 rounded-lg font-semibold ${form.paymentMethod === m ? 'bg-purple-600 text-white' : btn}`}>{m}</button>)}
+              </div>
+            </div>
+            {form.paymentMethod === 'Parcelado' && (
+              <div className="mb-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Número de Parcelas:</label>
+                  <input 
+                    type="number" 
+                    min="2" 
+                    max="24" 
+                    value={form.installments} 
+                    onChange={(e) => {
+                      const count = parseInt(e.target.value) || 2;
+                      const dates = [];
+                      const today = new Date();
+                      for (let i = 0; i < count; i++) {
+                        const d = new Date(today);
+                        d.setMonth(d.getMonth() + i);
+                        dates.push(d.toISOString().split('T')[0]);
+                      }
+                      setForm({...form, installments: count.toString(), installmentDates: dates});
+                    }} 
+                    className={`w-full p-3 border rounded-lg ${input}`} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Datas das Parcelas:</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(form.installmentDates || []).map((date, i) => (
+                      <input 
+                        key={i} 
+                        type="date" 
+                        value={date} 
+                        onChange={(e) => {
+                          const newDates = [...form.installmentDates];
+                          newDates[i] = e.target.value;
+                          setForm({...form, installmentDates: newDates});
+                        }}
+                        className={`p-2 border rounded ${input}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            <button onClick={addExpense} className="w-full bg-indigo-600 text-white px-6 py-4 rounded-lg font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2 text-lg">
+              <PlusCircle className="w-6 h-6" />Adicionar Despesa
+            </button>
+          </div>
+        )}
+
+        {currentPage === 'saldo' && (
+          <div>
+            <div className={`rounded-xl shadow-lg p-4 mb-6 ${card}`}>
+              <div className="flex items-center gap-4 flex-wrap">
+                <Calendar className="w-5 h-5" />
+                <span className="font-semibold">Período:</span>
+                <div className="flex gap-2 items-center">
+                  <label className="text-sm">De:</label>
+                  <input type="date" value={dateRange.start} onChange={(e) => setDateRange({...dateRange, start: e.target.value})} className={`p-2 border rounded ${input}`} />
+                  <label className="text-sm">Até:</label>
+                  <input type="date" value={dateRange.end} onChange={(e) => setDateRange({...dateRange, end: e.target.value})} className={`p-2 border rounded ${input}`} />
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className={`rounded-xl shadow-lg p-8 ${card}`}>
+                <div className="flex items-center justify-between mb-4"><h3 className="text-2xl font-semibold">Renato</h3><User className="w-8 h-8 text-blue-600" /></div>
+                <p className="text-5xl font-bold text-blue-600 mb-2">R$ {renatoTotal.toFixed(2)}</p>
+                <p className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Total de gastos</p>
+              </div>
+              <div className={`rounded-xl shadow-lg p-8 ${card}`}>
+                <div className="flex items-center justify-between mb-4"><h3 className="text-2xl font-semibold">Anna</h3><User className="w-8 h-8 text-pink-600" /></div>
+                <p className="text-5xl font-bold text-pink-600 mb-2">R$ {annaTotal.toFixed(2)}</p>
+                <p className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Total de gastos</p>
+              </div>
+              <div className={`rounded-xl shadow-lg p-8 ${card}`}>
+                <div className="flex items-center justify-between mb-4"><h3 className="text-2xl font-semibold">Saldo</h3><TrendingUp className="w-8 h-8 text-green-600" /></div>
+                <p className={`text-5xl font-bold mb-2 ${balance > 0 ? 'text-green-600' : balance < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                  {Math.abs(balance) > 0 ? `R$ ${Math.abs(balance).toFixed(2)}` : 'R$ 0,00'}
+                </p>
+                <p className={darkMode ? 'text-gray-400' : 'text-gray-500'}>{balance > 0 ? 'Renato gastou mais' : balance < 0 ? 'Anna gastou mais' : 'Gastos iguais'}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {currentPage === 'categorias' && (
+          <div>
+            <div className={`rounded-xl shadow-lg p-4 mb-6 ${card}`}>
+              <div className="flex items-center gap-4 flex-wrap">
+                <Calendar className="w-5 h-5" />
+                <span className="font-semibold">Período:</span>
+                <div className="flex gap-2 items-center">
+                  <label className="text-sm">De:</label>
+                  <input type="date" value={dateRange.start} onChange={(e) => setDateRange({...dateRange, start: e.target.value})} className={`p-2 border rounded ${input}`} />
+                  <label className="text-sm">Até:</label>
+                  <input type="date" value={dateRange.end} onChange={(e) => setDateRange({...dateRange, end: e.target.value})} className={`p-2 border rounded ${input}`} />
+                </div>
+              </div>
+            </div>
+            {byCategory.length > 0 ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className={`rounded-xl shadow-lg p-8 ${card}`}>
+                  <h3 className="text-3xl font-semibold mb-8 text-center">Gráfico de Gastos</h3>
+                  <PieChart data={byCategory} />
+                  <div className="mt-6 space-y-2">
+                    {(byCategory || []).map(cat => (
+                      <div key={cat.name} className="flex items-center gap-3">
+                        <div className="w-4 h-4 rounded-full" style={{backgroundColor: cat.color}}></div>
+                        <span className="flex-1 font-medium">{cat.name}</span>
+                        <span className="font-semibold">R$ {cat.total.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className={`rounded-xl shadow-lg p-8 ${card}`}>
+                  <h3 className="text-3xl font-semibold mb-8">Detalhes por Categoria</h3>
+                  <div className="space-y-6">
+                    {(byCategory || []).map(cat => (
+                      <div key={cat.name} className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-6 h-6 rounded-full" style={{backgroundColor: cat.color}}></div>
+                            <span className="text-xl font-semibold">{cat.name}</span>
+                          </div>
+                          <span className="text-2xl font-bold" style={{color: cat.color}}>R$ {cat.total.toFixed(2)}</span>
+                        </div>
+                        <div className={`w-full rounded-full h-4 ${darkMode ? 'bg-gray-600' : 'bg-gray-200'}`}>
+                          <div className="h-4 rounded-full" style={{width: `${(cat.total / totalAmount) * 100}%`, backgroundColor: cat.color}} />
+                        </div>
+                        <p className={`text-sm mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {((cat.total / totalAmount) * 100).toFixed(1)}% do total
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className={`rounded-xl shadow-lg p-8 text-center ${card}`}>
+                <PieChart className={`w-16 h-16 mx-auto mb-4 ${darkMode ? 'text-gray-600' : 'text-gray-300'}`} />
+                <p className={`text-xl ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Nenhum gasto registrado neste período</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {currentPage === 'historico' && (
+          <div>
+            <div className={`rounded-xl shadow-lg p-4 mb-6 ${card}`}>
+              <div className="flex items-center gap-4 flex-wrap">
+                <Calendar className="w-5 h-5" />
+                <span className="font-semibold">Período:</span>
+                <div className="flex gap-2 items-center">
+                  <label className="text-sm">De:</label>
+                  <input type="date" value={dateRange.start} onChange={(e) => setDateRange({...dateRange, start: e.target.value})} className={`p-2 border rounded ${input}`} />
+                  <label className="text-sm">Até:</label>
+                  <input type="date" value={dateRange.end} onChange={(e) => setDateRange({...dateRange, end: e.target.value})} className={`p-2 border rounded ${input}`} />
+                </div>
+              </div>
+            </div>
+            <div className={`rounded-xl shadow-lg p-6 ${card}`}>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-semibold">Histórico de Despesas</h3>
+                <span className="bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg font-semibold">{filtered.length} despesa{filtered.length !== 1 ? 's' : ''}</span>
+              </div>
+              {filtered.length === 0 ? (
+                <div className="text-center py-12">
+                  <Receipt className={`w-16 h-16 mx-auto mb-4 ${darkMode ? 'text-gray-600' : 'text-gray-300'}`} />
+                  <p className={`text-xl ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Nenhuma despesa registrada neste período</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(filtered || []).sort((a, b) => new Date(b.date) - new Date(a.date)).map(exp => 
+                    editingExpense && editingExpense.id === exp.id ? (
+                      <div key={exp.id} className={`p-5 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <input type="text" value={editingExpense.description} onChange={(e) => setEditingExpense({...editingExpense, description: e.target.value})} className={`p-2 border rounded ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} />
+                          <input type="number" step="0.01" value={editingExpense.amount} onChange={(e) => setEditingExpense({...editingExpense, amount: e.target.value})} className={`p-2 border rounded ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} />
+                          <select value={editingExpense.category} onChange={(e) => setEditingExpense({...editingExpense, category: e.target.value})} className={`p-2 border rounded ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`}>
+                            {(categories || []).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          </select>
+                          <input type="date" value={editingExpense.date} onChange={(e) => setEditingExpense({...editingExpense, date: e.target.value})} className={`p-2 border rounded ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} />
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => {
+                            if (!editingExpense.description.trim() || !editingExpense.amount || parseFloat(editingExpense.amount) <= 0) {alert('Preencha todos os campos!'); return;}
+                            const amt = parseFloat(editingExpense.amount);
+                            const upd = {...editingExpense, amount: amt, renatoShare: editingExpense.splitType === '50/50' ? amt / 2 : (editingExpense.paidBy === 'Renato' ? amt : 0), annaShare: editingExpense.splitType === '50/50' ? amt / 2 : (editingExpense.paidBy === 'Anna' ? amt : 0)};
+                            setExpenses(expenses.map(e => e.id === editingExpense.id ? upd : e));
+                            setEditingExpense(null);
+                          }} className="flex-1 bg-green-600 text-white py-2 rounded font-semibold">Salvar</button>
+                          <button onClick={() => setEditingExpense(null)} className="flex-1 bg-gray-600 text-white py-2 rounded font-semibold">Cancelar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={exp.id} className={`flex items-center justify-between p-5 rounded-lg ${exp.paid ? (darkMode ? 'bg-green-900 bg-opacity-30' : 'bg-green-50') : (darkMode ? 'bg-gray-700' : 'bg-gray-50')}`}>
+                        <div className="flex items-center gap-4 flex-1">
+                          <input 
+                            type="checkbox" 
+                            checked={exp.paid} 
+                            onChange={() => togglePaid(exp.id)}
+                            className="w-6 h-6 cursor-pointer"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 flex-wrap mb-2">
+                              <span className={`text-lg font-semibold ${exp.paid ? 'line-through opacity-60' : ''}`}>{exp.description}</span>
+                              <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium">{exp.category}</span>
+                              <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">{exp.paymentMethod}</span>
+                              {exp.paid && <span className="px-3 py-1 bg-green-600 text-white rounded-full text-sm font-medium">PAGO</span>}
+                            </div>
+                            <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                              Pago por <span className="font-semibold">{exp.paidBy}</span> • {new Date(exp.date).toLocaleDateString('pt-BR')} • {exp.splitType === '50/50' ? 'Dividido' : 'Individual'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className={`font-bold text-2xl ${exp.paid ? 'line-through opacity-60' : ''}`}>R$ {exp.amount.toFixed(2)}</span>
+                          <button onClick={() => setEditingExpense(exp)} className="text-blue-600 hover:text-blue-700 p-2"><Edit2 className="w-5 h-5" /></button>
+                          <button onClick={() => deleteExpense(exp.id)} className="text-red-600 hover:text-red-700 p-2"><Trash2 className="w-5 h-5" /></button>
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ExpenseTracker;
