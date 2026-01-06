@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Gastos - Renato & Anna</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Mock dos ícones para funcionar sem imports de módulos
+        const Icon = ({ name, className }) => {
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
+            return <i data-lucide={name} className={className}></i>;
+        };
+
+        const ExpenseTracker = () => {
+            const [expenses, setExpenses] = useState([]);
+            const [categories, setCategories] = useState(['Comida', 'Móveis', 'Utensílios', 'Conforto', 'Energia', 'Água', 'Internet', 'Outros']);
+            const [form, setForm] = useState({
+                description: '', 
+                amount: '', 
+                category: 'Comida', 
+                paidBy: 'Renato', 
+                splitType: '50/50', 
+                paymentMethod: 'Pix', 
+                installments: '2', 
+                date: new Date().toISOString().split('T')[0],
+                installmentDates: []
+            });
+            const [dateRange, setDateRange] = useState({ start: '2026-01-01', end: '2026-12-31' });
+            const [currentPage, setCurrentPage] = useState('adicionar');
+            const [showCategoryManager, setShowCategoryManager] = useState(false);
+            const [newCategory, setNewCategory] = useState('');
+            const [editingCategory, setEditingCategory] = useState(null);
+            const [editingCategoryName, setEditingCategoryName] = useState('');
+            const [editingExpense, setEditingExpense] = useState(null);
+            const [darkMode, setDarkMode] = useState(false);
+
+            const people = ['Renato', 'Anna'];
+            const paymentMethods = ['Pix', 'Crédito', 'Parcelado'];
+
+            const categoryColors = {
+                'Comida': '#ef4444', 'Móveis': '#f97316', 'Utensílios': '#f59e0b',
+                'Conforto': '#eab308', 'Energia': '#84cc16', 'Água': '#22c55e',
+                'Internet': '#10b981', 'Outros': '#14b8a6'
+            };
+
+            const addExpense = () => {
+                if (!form.description.trim() || !form.amount || parseFloat(form.amount) <= 0) {
+                    alert('Preencha descrição e valor!');
+                    return;
+                }
+                const total = parseFloat(form.amount);
+                const count = form.paymentMethod === 'Parcelado' ? parseInt(form.installments) : 1;
+                const amt = total / count;
+                const newExp = [];
+                
+                for (let i = 0; i < count; i++) {
+                    let d = (form.paymentMethod === 'Parcelado' && form.installmentDates[i]) ? form.installmentDates[i] : form.date;
+                    
+                    newExp.push({
+                        id: `${Date.now()}-${i}-${Math.random()}`,
+                        description: count > 1 ? `${form.description} (${i + 1}/${count})` : form.description,
+                        amount: amt,
+                        category: form.category,
+                        paidBy: form.paidBy,
+                        splitType: form.splitType,
+                        paymentMethod: form.paymentMethod,
+                        date: d,
+                        paid: false,
+                        renatoShare: form.splitType === '50/50' ? amt / 2 : (form.paidBy === 'Renato' ? amt : 0),
+                        annaShare: form.splitType === '50/50' ? amt / 2 : (form.paidBy === 'Anna' ? amt : 0)
+                    });
+                }
+                setExpenses([...expenses, ...newExp]);
+                setForm({...form, description: '', amount: '', installments: '2', date: new Date().toISOString().split('T')[0], installmentDates: []});
+                alert('Despesa adicionada!');
+            };
+
+            const togglePaid = (id) => setExpenses(expenses.map(e => e.id === id ? {...e, paid: !e.paid} : e));
+            const deleteExpense = (id) => window.confirm('Excluir despesa?') && setExpenses(expenses.filter(e => e.id !== id));
+
+            const filtered = expenses.filter(exp => {
+                const d = new Date(exp.date);
+                return d >= new Date(dateRange.start) && d <= new Date(dateRange.end);
+            });
+
+            const renatoTotal = filtered.reduce((s, e) => s + e.renatoShare, 0);
+            const annaTotal = filtered.reduce((s, e) => s + e.annaShare, 0);
+            const balance = renatoTotal - annaTotal;
+            const byCategory = categories.map(cat => ({
+                name: cat,
+                total: filtered.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0),
+                color: categoryColors[cat] || '#6366f1'
+            })).filter(c => c.total > 0);
+            const totalAmount = byCategory.reduce((sum, cat) => sum + cat.total, 0);
+
+            const bg = darkMode ? 'bg-gray-900 text-white' : 'bg-slate-50 text-gray-900';
+            const card = darkMode ? 'bg-gray-800' : 'bg-white';
+            const input = darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300';
+
+            return (
+                <div className={`min-h-screen transition-colors duration-300 ${bg}`}>
+                    {/* Header */}
+                    <header className={`${card} shadow-md p-6 mb-8`}>
+                        <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+                            <h1 className="text-2xl font-bold flex items-center gap-2">
+                                <Icon name="dollar-sign" className="text-indigo-500" /> Controle de Gastos
+                            </h1>
+                            <div className="flex gap-2">
+                                <button onClick={() => setDarkMode(!darkMode)} className="p-2 rounded-lg bg-gray-200 dark:bg-gray-700">
+                                    <Icon name={darkMode ? "sun" : "moon"} />
+                                </button>
+                                <button onClick={() => setShowCategoryManager(!showCategoryManager)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                                    <Icon name="settings" /> Categorias
+                                </button>
+                            </div>
+                        </div>
+                        <nav className="max-w-4xl mx-auto mt-6 flex gap-2 overflow-x-auto pb-2">
+                            {[
+                                {id: 'adicionar', icon: 'plus-circle', label: 'Add'}, 
+                                {id: 'saldo', icon: 'home', label: 'Saldo'}, 
+                                {id: 'categorias', icon: 'pie-chart', label: 'Gráficos'}, 
+                                {id: 'historico', icon: 'receipt', label: 'Histórico'}
+                            ].map(p => (
+                                <button key={p.id} onClick={() => setCurrentPage(p.id)} className={`flex-1 min-w-[100px] py-2 rounded-lg flex items-center justify-center gap-2 font-medium ${currentPage === p.id ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                                    <Icon name={p.icon} className="w-4 h-4" /> {p.label}
+                                </button>
+                            ))}
+                        </nav>
+                    </header>
+
+                    <main className="max-w-4xl mx-auto px-4 pb-12">
+                        {/* Manager Categorias */}
+                        {showCategoryManager && (
+                            <section className={`${card} p-6 rounded-xl shadow-sm mb-6`}>
+                                <h2 className="text-lg font-bold mb-4">Gerenciar Categorias</h2>
+                                <div className="flex gap-2 mb-4">
+                                    <input type="text" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className={`flex-1 p-2 border rounded ${input}`} placeholder="Nova categoria..." />
+                                    <button onClick={() => {if(newCategory){setCategories([...categories, newCategory]); setNewCategory('')}}} className="bg-green-600 text-white px-4 rounded">Add</button>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                    {categories.map(c => (
+                                        <div key={c} className="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-700 rounded">
+                                            <span>{c}</span>
+                                            <button onClick={() => setCategories(categories.filter(cat => cat !== c))} className="text-red-500"><Icon name="trash-2" className="w-4 h-4"/></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {/* Conteúdo das Páginas */}
+                        {currentPage === 'adicionar' && (
+                            <div className={`${card} p-6 rounded-xl shadow-lg`}>
+                                <h2 className="text-xl font-bold mb-6">Nova Despesa</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <input type="text" placeholder="Descrição" value={form.description} onChange={e => setForm({...form, description: e.target.value})} className={`p-3 border rounded ${input}`} />
+                                    <input type="number" placeholder="Valor total" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} className={`p-3 border rounded ${input}`} />
+                                    <select value={form.category} onChange={e => setForm({...form, category: e.target.value})} className={`p-3 border rounded ${input}`}>
+                                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                    <select value={form.paymentMethod} onChange={e => {
+                                        const val = e.target.value;
+                                        if(val === 'Parcelado'){
+                                            const dates = Array(2).fill(new Date().toISOString().split('T')[0]);
+                                            setForm({...form, paymentMethod: val, installmentDates: dates});
+                                        } else {
+                                            setForm({...form, paymentMethod: val});
+                                        }
+                                    }} className={`p-3 border rounded ${input}`}>
+                                        {paymentMethods.map(m => <option key={m} value={m}>{m}</option>)}
+                                    </select>
+                                </div>
+
+                                <div className="mt-6">
+                                    <p className="font-bold mb-2 text-sm">Pago por:</p>
+                                    <div className="flex gap-2">
+                                        {people.map(p => (
+                                            <button key={p} onClick={() => setForm({...form, paidBy: p})} className={`flex-1 py-2 rounded border ${form.paidBy === p ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-400'}`}>{p}</button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <button onClick={addExpense} className="w-full mt-8 bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 transition">
+                                    Adicionar Despesa
+                                </button>
+                            </div>
+                        )}
+
+                        {currentPage === 'saldo' && (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className={`${card} p-6 rounded-xl shadow text-center border-b-4 border-blue-500`}>
+                                    <p className="text-sm opacity-70">Renato Gastou</p>
+                                    <p className="text-3xl font-bold text-blue-500">R$ {renatoTotal.toFixed(2)}</p>
+                                </div>
+                                <div className={`${card} p-6 rounded-xl shadow text-center border-b-4 border-pink-500`}>
+                                    <p className="text-sm opacity-70">Anna Gastou</p>
+                                    <p className="text-3xl font-bold text-pink-500">R$ {annaTotal.toFixed(2)}</p>
+                                </div>
+                                <div className={`${card} p-6 rounded-xl shadow text-center border-b-4 ${balance >= 0 ? 'border-green-500' : 'border-red-500'}`}>
+                                    <p className="text-sm opacity-70">Saldo Devedor</p>
+                                    <p className={`text-3xl font-bold ${balance >= 0 ? 'text-green-500' : 'text-red-500'}`}>R$ {Math.abs(balance).toFixed(2)}</p>
+                                    <p className="text-xs mt-2">{balance > 0 ? 'Renato pagou mais' : balance < 0 ? 'Anna pagou mais' : 'Tudo igual!'}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {currentPage === 'historico' && (
+                            <div className="space-y-3">
+                                {filtered.length === 0 ? <p className="text-center opacity-50">Nenhuma despesa encontrada.</p> : 
+                                filtered.sort((a,b) => new Date(b.date) - new Date(a.date)).map(exp => (
+                                    <div key={exp.id} className={`${card} p-4 rounded-lg shadow-sm flex items-center justify-between border-l-4 ${exp.paid ? 'border-green-500' : 'border-gray-400'}`}>
+                                        <div className="flex items-center gap-3">
+                                            <input type="checkbox" checked={exp.paid} onChange={() => togglePaid(exp.id)} className="w-5 h-5" />
+                                            <div>
+                                                <p className={`font-bold ${exp.paid ? 'line-through opacity-50' : ''}`}>{exp.description}</p>
+                                                <p className="text-xs opacity-60">{exp.category} • {exp.paidBy} • {new Date(exp.date).toLocaleDateString()}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <span className="font-bold text-lg">R$ {exp.amount.toFixed(2)}</span>
+                                            <button onClick={() => deleteExpense(exp.id)} className="text-red-400"><Icon name="trash-2" className="w-5 h-5"/></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        
+                        {currentPage === 'categorias' && (
+                            <div className={`${card} p-6 rounded-xl shadow text-center`}>
+                                <h3 className="text-xl font-bold mb-6">Gastos por Categoria</h3>
+                                {byCategory.map(cat => (
+                                    <div key={cat.name} className="mb-4">
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span>{cat.name}</span>
+                                            <span className="font-bold">R$ {cat.total.toFixed(2)}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                                            <div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: `${(cat.total / totalAmount) * 100}%` }}></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ExpenseTracker />);
+    </script>
+</body>
+</html>
